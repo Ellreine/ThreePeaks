@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
@@ -12,6 +13,9 @@ public class GameManager : MonoBehaviour
     public Transform closedDeck;
     public Transform baseCardTransform;
     public DeckManager deckManager; // Ссылка на DeckManager
+    public GameObject gameOverPanel;// Панель Game Over
+    public GameObject CountClosedDeckPanel;
+    public Text closedDeckCountText;
 
     private List<Card> deck;
     private Card currentBaseCard;
@@ -26,6 +30,8 @@ public class GameManager : MonoBehaviour
         deck = deckManager.InitializeDeck();
         deckManager.ShuffleDeck(deck);
         DealCards();
+        gameOverPanel.SetActive(false); // Скрыть панель Game Over в начале игры
+        UpdateClosedDeckCount();
     }
 
     void DealCards()
@@ -83,6 +89,8 @@ public class GameManager : MonoBehaviour
         baseCard.SetFaceUp(true);
         baseCard.gameObject.SetActive(true);
         currentBaseCard = baseCard;
+
+        UpdateClosedDeckCount();
     }
 
     public void OnCardClicked(Card clickedCard)
@@ -112,11 +120,17 @@ public class GameManager : MonoBehaviour
             CheckUncoveredCardsInRow(row2, row3); // Row2 проверяет на перекрытие с Row3
             CheckUncoveredCardsInRow(row1, row2); // Row1 проверяет на перекрытие с Row2
 
-            // Если закрытая колода пуста, откроем все оставшиеся карты
+            // Если закрытая колода пуста, проверить возможные ходы
             if (closedDeck.childCount == 0)
             {
-                RevealAllCards();
+                if (!CheckForPossibleMoves())
+                {
+                    // Нет возможных ходов, игра окончена
+                    GameOver();
+                }
             }
+
+            UpdateClosedDeckCount();
         }
         else
         {
@@ -148,11 +162,18 @@ public class GameManager : MonoBehaviour
         CheckUncoveredCardsInRow(row2, row3); // Row2 проверяет на перекрытие с Row3
         CheckUncoveredCardsInRow(row1, row2); // Row1 проверяет на перекрытие с Row2
 
-        // Если закрытая колода пуста, откроем все оставшиеся карты
+        // Если закрытая колода пуста, проверить возможные ходы
         if (closedDeck.childCount == 0)
         {
-            RevealAllCards();
+            CountClosedDeckPanel.SetActive(false);
+            if (!CheckForPossibleMoves())
+            {
+                // Нет возможных ходов, игра окончена
+                GameOver();
+            }
         }
+
+        UpdateClosedDeckCount();
     }
 
     private bool CanPlaceCardOnBase(Card card)
@@ -168,8 +189,8 @@ public class GameManager : MonoBehaviour
         Debug.Log($"Checking if card {card.cardName} can be placed on base {currentBaseCard.cardName}");
         Debug.Log($"Base card value: {baseValue}, clicked card value: {cardValue}");
 
-        bool canPlace = (baseValue == 1 && (cardValue == 13 || cardValue == 2)) || // Туз и король или двойка
-                        (baseValue == 13 && (cardValue == 12 || cardValue == 1)) || // Король и дама или туз
+        bool canPlace = (baseValue == 2 && (cardValue == 14 || cardValue == 3)) || // Туз и король или двойка
+                        (baseValue == 14 && (cardValue == 13 || cardValue == 2)) || // Король и дама или туз
                         (cardValue == baseValue + 1 || cardValue == baseValue - 1); // Обычные карты
 
         Debug.Log($"Can place card: {canPlace}");
@@ -212,6 +233,27 @@ public class GameManager : MonoBehaviour
         return false;
     }
 
+    // Метод для проверки возможных ходов
+    private bool CheckForPossibleMoves()
+    {
+        List<Card> allCards = new List<Card>();
+        allCards.AddRange(row1.GetComponentsInChildren<Card>());
+        allCards.AddRange(row2.GetComponentsInChildren<Card>());
+        allCards.AddRange(row3.GetComponentsInChildren<Card>());
+        allCards.AddRange(row4.GetComponentsInChildren<Card>());
+
+        int baseValue = currentBaseCard.value;
+
+        foreach (Card card in allCards)
+        {
+            if (card.isFaceUp && CanPlaceCardOnBase(card))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Метод для открытия всех оставшихся карт
     public void RevealAllCards()
     {
@@ -226,5 +268,18 @@ public class GameManager : MonoBehaviour
             card.SetFaceUp(true);
             Debug.Log("Revealed card: " + card.cardName);
         }
+    }
+
+    private void UpdateClosedDeckCount()
+    {
+        closedDeckCountText.text = "Cards left in deck: " + closedDeck.childCount;
+    }
+
+    // Метод для завершения игры
+    private void GameOver()
+    {
+        Debug.Log("Game Over");
+        gameOverPanel.SetActive(true); // Показать панель Game Over
+        CountClosedDeckPanel.SetActive(false);
     }
 }
