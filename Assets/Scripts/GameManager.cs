@@ -1,19 +1,23 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance; // Singleton instance
 
-    public GameObject cardPrefab;
     public Row row1;
     public Row row2;
     public Row row3;
     public Row row4;
     public Transform closedDeck;
     public Transform baseCardTransform;
+    public DeckManager deckManager; // Ссылка на DeckManager
+    public GameObject gameOverPanel;// Панель Game Over
+    public GameObject CountClosedDeckPanel;
+    public Text closedDeckCountText;
 
-    private List<Card> deck = new List<Card>();
+    private List<Card> deck;
     private Card currentBaseCard;
 
     void Awake()
@@ -23,50 +27,11 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        InitializeDeck();
-        ShuffleDeck();
+        deck = deckManager.InitializeDeck();
+        deckManager.ShuffleDeck(deck);
         DealCards();
-    }
-
-    void InitializeDeck()
-    {
-        string[] suits = { "Hearts", "Diamonds", "Clubs", "Spades" };
-        string[] ranks = { "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k", "a" };
-        Sprite backSprite = Resources.Load<Sprite>("Sprites/back_red");
-
-        foreach (string suit in suits)
-        {
-            for (int i = 0; i < ranks.Length; i++)
-            {
-                string rank = ranks[i];
-                string cardName = $"{suit}_{rank}";
-                Sprite frontSprite = Resources.Load<Sprite>($"Sprites/{cardName}");
-                if (frontSprite != null)
-                {
-                    GameObject cardObject = Instantiate(cardPrefab);
-                    Card card = cardObject.GetComponent<Card>();
-                    int value = i + 2; // Значение карты соответствует её индексу в массиве ranks плюс 2 (для 2-ки значение должно быть 2)
-                    card.SetCard(value, suit, cardName, frontSprite, backSprite, false);
-                    deck.Add(card);
-                    cardObject.SetActive(false);
-                }
-                else
-                {
-                    Debug.LogError($"Could not find sprite for {cardName}");
-                }
-            }
-        }
-    }
-
-    void ShuffleDeck()
-    {
-        for (int i = 0; i < deck.Count; i++)
-        {
-            Card temp = deck[i];
-            int randomIndex = UnityEngine.Random.Range(0, deck.Count);
-            deck[i] = deck[randomIndex];
-            deck[randomIndex] = temp;
-        }
+        gameOverPanel.SetActive(false); // Скрыть панель Game Over в начале игры
+        UpdateClosedDeckCount();
     }
 
     void DealCards()
@@ -124,6 +89,8 @@ public class GameManager : MonoBehaviour
         baseCard.SetFaceUp(true);
         baseCard.gameObject.SetActive(true);
         currentBaseCard = baseCard;
+
+        UpdateClosedDeckCount();
     }
 
     public void OnCardClicked(Card clickedCard)
@@ -146,6 +113,24 @@ public class GameManager : MonoBehaviour
             currentBaseCard = clickedCard;
 
             Debug.Log("New base card: " + currentBaseCard.cardName);
+
+            // Check uncovered cards in rows
+            CheckUncoveredCardsInRow(row4, null); // Row4 не проверяет на перекрытие
+            CheckUncoveredCardsInRow(row3, row4); // Row3 проверяет на перекрытие с Row4
+            CheckUncoveredCardsInRow(row2, row3); // Row2 проверяет на перекрытие с Row3
+            CheckUncoveredCardsInRow(row1, row2); // Row1 проверяет на перекрытие с Row2
+
+            // Если закрытая колода пуста, проверить возможные ходы
+            if (closedDeck.childCount == 0)
+            {
+                if (!CheckForPossibleMoves())
+                {
+                    // Нет возможных ходов, игра окончена
+                    GameOver();
+                }
+            }
+
+            UpdateClosedDeckCount();
         }
         else
         {
@@ -170,6 +155,25 @@ public class GameManager : MonoBehaviour
         currentBaseCard = clickedCard;
 
         Debug.Log("New base card: " + currentBaseCard.cardName);
+
+        // Check uncovered cards in rows
+        CheckUncoveredCardsInRow(row4, null); // Row4 не проверяет на перекрытие
+        CheckUncoveredCardsInRow(row3, row4); // Row3 проверяет на перекрытие с Row4
+        CheckUncoveredCardsInRow(row2, row3); // Row2 проверяет на перекрытие с Row3
+        CheckUncoveredCardsInRow(row1, row2); // Row1 проверяет на перекрытие с Row2
+
+        // Если закрытая колода пуста, проверить возможные ходы
+        if (closedDeck.childCount == 0)
+        {
+            CountClosedDeckPanel.SetActive(false);
+            if (!CheckForPossibleMoves())
+            {
+                // Нет возможных ходов, игра окончена
+                GameOver();
+            }
+        }
+
+        UpdateClosedDeckCount();
     }
 
     private bool CanPlaceCardOnBase(Card card)
@@ -185,8 +189,8 @@ public class GameManager : MonoBehaviour
         Debug.Log($"Checking if card {card.cardName} can be placed on base {currentBaseCard.cardName}");
         Debug.Log($"Base card value: {baseValue}, clicked card value: {cardValue}");
 
-        bool canPlace = (baseValue == 1 && (cardValue == 13 || cardValue == 2)) || // Туз и король или двойка
-                        (baseValue == 13 && (cardValue == 12 || cardValue == 1)) || // Король и дама или туз
+        bool canPlace = (baseValue == 2 && (cardValue == 14 || cardValue == 3)) || // Туз и король или двойка
+                        (baseValue == 14 && (cardValue == 13 || cardValue == 2)) || // Король и дама или туз
                         (cardValue == baseValue + 1 || cardValue == baseValue - 1); // Обычные карты
 
         Debug.Log($"Can place card: {canPlace}");
@@ -196,5 +200,86 @@ public class GameManager : MonoBehaviour
     public bool IsBaseCard(Card card)
     {
         return card == currentBaseCard;
+    }
+
+    private void CheckUncoveredCardsInRow(Row row, Row rowBelow)
+    {
+        Card[] cardsInRow = row.GetComponentsInChildren<Card>();
+        foreach (Card card in cardsInRow)
+        {
+            if (rowBelow == null || !IsCardCovered(card, rowBelow))
+            {
+                card.IsCovered = false;
+                card.CheckIfUncovered();
+            }
+        }
+    }
+
+    private bool IsCardCovered(Card card, Row rowBelow)
+    {
+        Bounds cardBounds = card.GetBounds();
+        Card[] cardsInRowBelow = rowBelow.GetComponentsInChildren<Card>();
+
+        foreach (Card otherCard in cardsInRowBelow)
+        {
+            if (otherCard != card)
+            {
+                if (cardBounds.Intersects(otherCard.GetBounds()))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Метод для проверки возможных ходов
+    private bool CheckForPossibleMoves()
+    {
+        List<Card> allCards = new List<Card>();
+        allCards.AddRange(row1.GetComponentsInChildren<Card>());
+        allCards.AddRange(row2.GetComponentsInChildren<Card>());
+        allCards.AddRange(row3.GetComponentsInChildren<Card>());
+        allCards.AddRange(row4.GetComponentsInChildren<Card>());
+
+        int baseValue = currentBaseCard.value;
+
+        foreach (Card card in allCards)
+        {
+            if (card.isFaceUp && CanPlaceCardOnBase(card))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Метод для открытия всех оставшихся карт
+    public void RevealAllCards()
+    {
+        List<Card> allCards = new List<Card>();
+        allCards.AddRange(row1.GetComponentsInChildren<Card>());
+        allCards.AddRange(row2.GetComponentsInChildren<Card>());
+        allCards.AddRange(row3.GetComponentsInChildren<Card>());
+        allCards.AddRange(row4.GetComponentsInChildren<Card>());
+
+        foreach (Card card in allCards)
+        {
+            card.SetFaceUp(true);
+            Debug.Log("Revealed card: " + card.cardName);
+        }
+    }
+
+    private void UpdateClosedDeckCount()
+    {
+        closedDeckCountText.text = "Cards left in deck: " + closedDeck.childCount;
+    }
+
+    // Метод для завершения игры
+    private void GameOver()
+    {
+        Debug.Log("Game Over");
+        gameOverPanel.SetActive(true); // Показать панель Game Over
+        CountClosedDeckPanel.SetActive(false);
     }
 }
