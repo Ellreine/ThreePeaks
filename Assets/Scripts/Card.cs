@@ -8,13 +8,15 @@ public class Card : MonoBehaviour
     public Sprite frontSprite;
     public Sprite backSprite;
     public bool isFaceUp;
-    public bool IsCovered { get; set; } // Используется для другой механики
+    public bool IsCovered { get; set; }
 
     private SpriteRenderer spriteRenderer;
+    private BoxCollider2D boxCollider;
 
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        boxCollider = GetComponent<BoxCollider2D>();
         UpdateCardAppearance();
     }
 
@@ -50,6 +52,10 @@ public class Card : MonoBehaviour
             SetFaceUp(true);
             Debug.Log("Card uncovered: " + cardName);
         }
+        else
+        {
+            Debug.Log("Card is still covered: " + cardName);
+        }
     }
 
     private void UpdateCardAppearance()
@@ -74,5 +80,10 @@ public class Card : MonoBehaviour
         {
             Debug.Log("Card cannot be clicked: " + cardName + " isFaceUp: " + isFaceUp);
         }
+    }
+
+    public Bounds GetBounds()
+    {
+        return boxCollider.bounds;
     }
 }
